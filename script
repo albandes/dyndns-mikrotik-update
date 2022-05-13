@@ -1,0 +1,54 @@
+#--------------- Change Values in this section to match your setup ---------
+      
+:local scriptname  "atualiza-duckdns-new"  
+:local domain  "xxx.duckdns.org"  
+:local token  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  
+
+:local webGetIpService "https://api.ipify.org/"
+ 
+:local debug false       
+       
+#--------------------------------------------------------------------------------------------------------  
+       
+       
+:log info  "[$scriptname] Run  "  
+       
+ # Tive que alterar pois a linha acima so funcionando qdo esta ligado direto, qdo o mkt eh uma DMZ   
+ # precisa usar as linhas abaixo para pegar o ip   
+       
+ # Get the current public IP using DNS-O-Matic service.     
+     
+# /tool fetch url=$webGetIpService mode=http dst-path=publicip.txt  
+
+:do {/tool fetch url=$webGetIpService mode=http dst-path=publicip.txt  } on-error={ :log erro  message=("[$scriptname] Service to get external IP not working: " . $webGetIpService) };
+
+
+:local currentIP [/file get publicip.txt contents]  
+:log info  message=("[$scriptname] External IP: " . $currentIP) 
+
+:if ([:len [/file find where name=ipstore.txt]] < 1 ) do={  
+   /file print file=ipstore.txt where name=ipstore.txt;  
+   /delay delay-time=2;  
+   /file set ipstore.txt contents= "0.0.0.0 ";  
+}; 
+
+:global previousIP value=[/file get [find where name=ipstore.txt ] value-name=contents];  
+
+if ($debug) do={     
+   :log info  message=("[$scriptname] Domain: " . $domain) 
+   :log info  message=("[$scriptname] Token: " . $token) 
+   :log info  message=("[$scriptname] Current IP: " . $currentIP) 
+   :log info  message=("[$scriptname] Previous IP: " . $previousIP)  
+};
+
+:if ( $previousIP !=  $currentIP) do={  
+    :log info message=("[$scriptname] Try to Update DuckDNS with actual IP  ". $currentIP. " -  Previous IP are  ". $previousIP);  
+    /tool fetch mode=https keep-result=yes dst-path=duckdns-result.txt address=[:resolve www.duckdns.org] port=443 host=www.duckdns.org src-path=( "/update?domains=$domain&token=$token&ip=$currentIP");  
+    /delay delay-time=5;  
+   :global lastChange value=[/file get [find where name=duckdns-result.txt ] value-name=contents];
+    :global previousIP value= $currentIP;  
+    /file set ipstore.txt contents=$currentIP;  
+    :if ($lastChange = "OK") do={:log info message=("[$scriptname] DuckDNS update successfull with IP ".$currentIP);};
+    :if ($lastChange = "KO") do={:log error message=("[ $scriptname] Fail to update DuckDNS with new IP ".$currentIP);};
+    } else={ :log info  "[$scriptname] There was no change in the IP address  " };  
+
